@@ -1,0 +1,133 @@
+BLOB Creation:
+
+#Azure Account Login
+Login-AzureRmAccount
+
+# Creating a new Resource Group
+New-AzureRmResourceGroup -Name storageGroup -Location CentralIndia
+
+#creating a storage account
+$storageAccount = New-AzureRmStorageAccount -ResourceGroupName storageGroup -Name "storageps$(Get-Random)" -Location CentralIndia -SkuName Standard_LRS -Kind Storage -EnableEncryptionService Blob
+$ctx = $storageAccount.Context
+
+#creating a container
+$containerName = "containerps"
+New-AzureStorageContainer -Name $containerName -Context $ctx -Permission blob
+
+#uploading blob into a container
+$localFileDirectory = "C:\"
+$blobName = "image.jpg"
+$localFile = $localFileDirectory + $blobName
+Set-AzureStorageBlobContent -File $localFile -Container $containerName -Blob $blobName -Context $ctx
+
+#get list of blobs in a container
+Get-AzureStorageBlob -Container $ContainerName -Context $ctx | select Name
+
+# local directory to which to download the files 
+$localTargetDirectory = "C:\download"
+
+# download a blob from container
+$blobName = "image.jpg"
+Get-AzureStorageBlobContent -Blob $blobName -Container $containerName -Destination $localTargetDirectory -Context $ctx 
+
+#delete blob from container
+$blobName = "image.jpg"
+Remove-AzureStorageBlob -Blob $blobName -Container $containerName -Context $ctx
+
+# get list of blobs to see the one we deleted is gone
+Get-AzureStorageBlob -Container $containerName -Context $ctx | select Name
+
+#Removing resources created
+Remove-AzureRmResourceGroup -Name storageGroup
+
+------------------------------------
+Database Creation:
+
+#Azure Account Login
+Login-AzureRmAccount
+
+# The data center and resource name for your resources
+$resourcegroupname = "dbGroup"
+$location = "CentralIndia"
+
+# The logical server name: Use a random value or replace with your own value (do not capitalize)
+$servername = "dbserver$(Get-Random)"
+
+# Set an admin login and password for your database server
+$adminlogin = "demo"
+$password = "Wipro789"
+
+# The ip address range that you want to allow to access your server - change as appropriate
+$startip = "0.0.0.0"
+$endip = "0.0.0.0"
+
+# The database name
+$databasename = "mydb"
+
+# Creating a new Resource Group
+New-AzureRmResourceGroup -Name $resourcegroupname -Location $location
+
+# Creating a logical server
+New-AzureRmSqlServer -ResourceGroupName $resourcegroupname -ServerName $servername -Location $location -SqlAdministratorCredentials $(New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $adminlogin, $(ConvertTo-SecureString -String $password -AsPlainText -Force))
+
+#Configuring firewall rule
+New-AzureRmSqlServerFirewallRule -ResourceGroupName $resourcegroupname -ServerName $servername -FirewallRuleName "MyRule" -StartIpAddress $startip -EndIpAddress $endip
+
+#Creating a default table in the selected database
+New-AzureRmSqlDatabase  -ResourceGroupName $resourcegroupname -ServerName $servername -DatabaseName $databasename -SampleName "AdventureWorksLT" -RequestedServiceObjectiveName "S0"
+
+#Removing resources created
+Remove-AzureRmResourceGroup -ResourceGroupName $resourcegroupname
+
+==================
+VM Creation:
+
+#Azure Account Login
+Login-AzureRmAccount
+
+# Creating a new Resource Group
+New-AzureRmResourceGroup -Name vmGroup -Location EastUS
+
+# Create a subnet configuration
+$subnetConfig = New-AzureRmVirtualNetworkSubnetConfig -Name mySubnet -AddressPrefix 192.168.1.0/24
+
+# Create a virtual network
+$vnet = New-AzureRmVirtualNetwork -ResourceGroupName vmGroup -Location EastUS -Name MYvNET -AddressPrefix 192.168.0.0/16 -Subnet $subnetConfig
+
+# Create a public IP address and specify a DNS name
+$pip = New-AzureRmPublicIpAddress -ResourceGroupName vmGroup -Location EastUS -AllocationMethod Static -IdleTimeoutInMinutes 4 -Name "MyDNS$(Get-Random)"
+
+# Create an inbound network security group rule for port 3389
+$nsgRuleRDP = New-AzureRmNetworkSecurityRuleConfig -Name RdpRule  -Protocol Tcp -Direction Inbound -Priority 1000 -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 3389 -Access Allow
+
+# Create an inbound network security group rule for port 80
+$nsgRuleWeb = New-AzureRmNetworkSecurityRuleConfig -Name HTTPRule  -Protocol Tcp -Direction Inbound -Priority 1001 -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 80 -Access Allow
+
+# Create a network security group
+$nsg = New-AzureRmNetworkSecurityGroup -ResourceGroupName vmGroup -Location EastUS -Name MyNSG -SecurityRules $nsgRuleRDP,$nsgRuleWeb
+
+# Create a virtual network card and associate with public IP address and NSG
+$nic = New-AzureRmNetworkInterface -Name myNic -ResourceGroupName vmGroup -Location EastUS -SubnetId $vnet.Subnets[0].Id -PublicIpAddressId $pip.Id -NetworkSecurityGroupId $nsg.Id
+
+# Define a credential object
+$cred = Get-Credential
+
+# Create a virtual machine configuration
+$vmConfig = New-AzureRmVMConfig -VMName myVM -VMSize Standard_DS2 | Set-AzureRmVMOperatingSystem -Windows -ComputerName myVM -Credential $cred |     Set-AzureRmVMSourceImage -PublisherName MicrosoftWindowsServer -Offer WindowsServer -Skus 2016-Datacenter -Version latest | Add-AzureRmVMNetworkInterface -Id $nic.Id
+
+#Creating a virtual machine
+New-AzureRmVM -ResourceGroupName vmGroup -Location EastUS -VM $vmConfig
+
+#Connectiong to virtual machine : Ip Address
+mstsc /v: | Get-AzureRmPublicIpAddress -ResourceGroupName vmGroup | Select IpAddress
+
+#Installing IIS Server inside VM
+Install-WindowsFeature -name Web-Server -IncludeManagementTools
+
+#Accessing web application : use  public ip address of vm to access
+
+#Removing resources created
+Remove-AzureRmResourceGroup -Name vmGroup
+
+======================
+
